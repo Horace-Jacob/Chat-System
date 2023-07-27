@@ -1,0 +1,203 @@
+﻿<div id="userlist">
+	
+</div>
+
+<div class="mt-3">
+	<div id="chatlist"></div>
+</div>
+
+
+@section scripts{
+	<script>
+		"use strict";
+
+
+		var connection = new signalR.HubConnectionBuilder().withUrl("https://localhost:7200/chathub").build();
+
+		connection.start().then(function () {
+
+		}).catch(function (err) {
+			console.log(err)
+		})
+
+		let sendToUserId = null;
+		let currentUserId = parseInt(localStorage.getItem("userid"));
+
+
+		function UserIdentifier(){
+			const getUsername = localStorage.getItem("username");
+			const getUserId = localStorage.getItem("userid");
+			if(getUsername == null || getUserId == null){
+				let username = prompt("Please State Your Identifier");
+				$.ajax({
+					cache: false,
+					url: '@Url.Action("IdentifyUser", "Chat")',
+					data: {username},
+					beforeSend: function(){
+
+					},
+					success: function(response){
+						if(response != null){
+							localStorage.setItem("username", username);
+							localStorage.setItem("userid", response.id);
+						}
+					},
+					error: function(error){
+						console.log(error);
+					}
+				})
+			}else{
+				return;
+			}
+		}
+
+		$(function(){
+			UserIdentifier();
+			CallUserListPartial();
+		})
+
+		function CallUserListPartial(){
+			const id = localStorage.getItem("userid");
+			$.ajax({
+				cache: false,
+				url: '@Url.Action("_userlist", "Chat")',
+				data: {id},
+				type: "GET",
+				success: function(response){
+					$("#userlist").empty().append(response);
+					$("button").click(function() {
+						let touserid = parseInt(this.id);
+						sendToUserId = parseInt(this.id);
+						const fromuserid = localStorage.getItem("userid");
+						CallChatListPartial(fromuserid, sendToUserId)
+					});
+				},
+				error: function(error){
+					console.log(error)
+				}
+			})
+		}
+
+		function CallChatListPartial(fromuserid, touserid){
+			
+			$.ajax({
+				cache: false,
+				url: '@Url.Action("_chatlist", "Chat")',
+				beforeSend: function () {
+
+				},
+				success: function (response) {
+					$("#chatlist").empty().append(response);
+					$.ajax({
+						cache: false,
+						url: '@Url.Action("GetSpecificChatData", "Chat")',
+						data: {fromuserid, touserid},
+						type: "GET",
+						beforeSend: function(){
+
+						},
+						success: function(response){
+							let getUserid = parseInt(localStorage.getItem("userid"));
+							console.log(response)
+							var robotImageUrl = 'https://s3-us-west-2.amazonaws.com/chrisnielsen/robot.png';
+							// Cartoon vector designed by Freepik
+							// http://www.freepik.com/free-photos-vectors/cartoon
+							// Pre-load image
+							$('<img/>')[0].src = robotImageUrl;
+							response.forEach((data) => {
+								if (data.fromUserId === getUserid) {
+									addToLog(data.message, true);
+								}else{
+									addToLog(data.message, false);
+								}
+							})
+							$("#fromUserId").val(currentUserId);
+							$("#toUserId").val(sendToUserId);
+							connection.on("SendMessage", function (message, fromUserId, toUserId) {
+								if (fromUserId === currentUserId) {
+									addToLog(message, true);
+								}
+								if (currentUserId === toUserId) {
+									addToLog(message, false);
+								}
+							})
+							$('#messageForm').submit(function (event) {
+								event.preventDefault();
+								//var fromuserid = currentUserId;
+								//var touserid = sendToUserId;
+								//var $userInput = $(this).find('#message');
+								var userinput = document.getElementById("message");
+								
+								$.ajax({
+									cache: false,
+									url: '@Url.Action("InsertChat", "Chat")',
+									type: "GET",
+									data: $(this).serialize(),
+									beforeSend: function () {
+									},
+									success: function (data) {
+										var message = userinput.value;
+										connection.invoke('SendMessage', message, currentUserId, sendToUserId).catch(function (error) {
+											console.log(error);
+										})
+										//$userInput.val('');
+										userinput.value = ""
+									},
+									complete: function () {
+										
+									},
+									error: function (error) {
+										console.log(error);
+									}
+								})
+							});
+							
+
+							function addToLog(message, user) {
+								var $message = $('<div class="message animated"></div>');
+
+								if (!user) {
+									var $picture = $('<img src="' + robotImageUrl + '"></img>');
+									$message.append($picture);
+								}
+
+								var $content = $('<div class="content"></div>');
+								$content.html(message);
+								$message.append($content);
+
+								var $log = $('.log');
+								$log.append($message);
+
+								if (user) {
+									$message.addClass('user');
+								}
+
+								$log.animate({ scrollTop: $log[0].scrollHeight }, "slow", 'linear');
+
+								setTimeout(function () {
+									if (user) {
+										$message.addClass('user');
+										$message.addClass('fadeInRightBig');
+									} else {
+										$message.addClass('fadeInLeftBig');
+									}
+								}, 0);
+							}
+						},
+						complete: function(){
+							
+						},
+						error: function(error){
+							console.log(error)
+						}
+					})
+					
+				},
+				error: function (error) {
+					console.log(error);
+				}
+			})
+		}
+		
+	</script>
+}
